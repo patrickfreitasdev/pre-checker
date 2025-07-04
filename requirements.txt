@@ -1,0 +1,13 @@
+selenium==4.15.2
+webdriver-manager==4.0.1
+opencv-python==4.8.1.78
+Pillow==10.1.0
+requests==2.31.0
+beautifulsoup4==4.12.2
+lxml==4.9.3
+python-dotenv==1.0.0
+click==8.1.7
+rich==13.7.0
+mss
+imageio[ffmpeg]
+matplotlib==3.8.2 
