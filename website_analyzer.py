@@ -72,6 +72,9 @@ class WebsiteAnalyzer:
         # Generate summary report
         self._generate_summary_report()
         
+        # Generate error log summary
+        self._generate_error_log_summary()
+        
         self.logger.info("Analysis completed for all URLs")
         return self.results
     
@@ -133,10 +136,12 @@ class WebsiteAnalyzer:
                     video_path = self._record_page_navigation(browser, url, viewport)
                     viewport_results['video_path'] = video_path
                 
-                # 2. Take full page screenshot (if 'screenshot' module is enabled)
+                # 2. Take full page screenshot with error capture (if 'screenshot' module is enabled)
                 if 'screenshot' in self.modules:
-                    screenshot_path = self._take_page_screenshot(browser, url, viewport)
-                    viewport_results['screenshot_path'] = screenshot_path
+                    screenshot_results = self._take_page_screenshot(browser, url, viewport)
+                    viewport_results['screenshot_path'] = screenshot_results['page_screenshot']
+                    viewport_results['error_log_path'] = screenshot_results['error_log']
+                    viewport_results['error_count'] = screenshot_results['error_count']
                 
                 # 3. Get page information
                 viewport_results['page_info'] = browser.get_page_info()
@@ -500,9 +505,9 @@ class WebsiteAnalyzer:
             self.logger.error(f"Error recording video for {url} ({viewport}): {str(e)}")
             return None
     
-    def _take_page_screenshot(self, browser: BrowserManager, url: str, viewport: str) -> str:
+    def _take_page_screenshot(self, browser: BrowserManager, url: str, viewport: str) -> Dict[str, str]:
         """
-        Take full page screenshot
+        Take full page screenshot with error capture and console logging
         
         Args:
             browser: BrowserManager instance
@@ -510,30 +515,63 @@ class WebsiteAnalyzer:
             viewport (str): Viewport type
             
         Returns:
-            str: Path to screenshot file
+            dict: Paths to screenshot files and error information
         """
         try:
-            # Generate screenshot filename
+            # Generate screenshot filenames
             filename = sanitize_filename(url, viewport)
-            screenshot_filename = f"{filename}.png"
+            page_screenshot_filename = f"{filename}.png"
+            error_log_filename = f"{filename}_console_errors.json"
+            
             screenshot_dir = os.path.join(self.output_dir, OUTPUT_CONFIG['subdirs']['screenshots'], viewport)
             # Ensure the screenshot directory exists
             os.makedirs(screenshot_dir, exist_ok=True)
-            screenshot_path = os.path.join(screenshot_dir, screenshot_filename)
+            
+            page_screenshot_path = os.path.join(screenshot_dir, page_screenshot_filename)
+            error_log_path = os.path.join(screenshot_dir, error_log_filename)
             
             # Wait for page to fully load
             time.sleep(SCREENSHOT_CONFIG['delay'])
             
-            # Take screenshot
-            if browser.take_screenshot(screenshot_path, full_page=SCREENSHOT_CONFIG['full_page']):
-                self.logger.info(f"Screenshot saved: {screenshot_path}")
-                return screenshot_path
+            # First, scroll through the page to trigger any lazy loading and capture errors
+            self.logger.info(f"Starting error capture scroll for {url} ({viewport})")
+            error_info = browser.scroll_and_capture_errors(duration=15)
+            
+            # Log error capture results
+            if error_info['capture_status'] == 'success':
+                if error_info['error_summary']['has_errors']:
+                    self.logger.info(f"Error capture completed for {url} ({viewport}): Found {error_info['total_errors']} errors")
+                    if error_info['error_summary']['error_types_found']:
+                        self.logger.info(f"Error types found: {', '.join(error_info['error_summary']['error_types_found'])}")
+                else:
+                    self.logger.info(f"Error capture completed for {url} ({viewport}): No errors found - page appears to be error-free")
             else:
-                raise Exception("Failed to take screenshot")
+                self.logger.warning(f"Error capture failed for {url} ({viewport}): {error_info.get('capture_error', 'Unknown error')}")
+            
+            # Save error information to JSON file
+            import json
+            with open(error_log_path, 'w') as f:
+                json.dump(error_info, f, indent=2)
+            
+            # Take page screenshot after scrolling
+            if browser.take_screenshot(page_screenshot_path, full_page=SCREENSHOT_CONFIG['full_page']):
+                self.logger.info(f"Page screenshot saved: {page_screenshot_path}")
+            else:
+                raise Exception("Failed to take page screenshot")
+            
+            return {
+                'page_screenshot': page_screenshot_path,
+                'error_log': error_log_path,
+                'error_count': error_info['total_errors']
+            }
                 
         except Exception as e:
-            self.logger.error(f"Error taking screenshot for {url} ({viewport}): {str(e)}")
-            return None
+            self.logger.error(f"Error taking screenshots for {url} ({viewport}): {str(e)}")
+            return {
+                'page_screenshot': None,
+                'error_log': None,
+                'error_count': 0
+            }
     
     def _calculate_summary(self, url_results: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -561,6 +599,8 @@ class WebsiteAnalyzer:
             if viewport_data.get('video_path'):
                 summary['files_generated'] += 1
             if viewport_data.get('screenshot_path'):
+                summary['files_generated'] += 1
+            if viewport_data.get('error_log_path'):
                 summary['files_generated'] += 1
             
             # Count PageSpeed files
@@ -619,7 +659,17 @@ class WebsiteAnalyzer:
                         f.write(f"Average Score: {summary['average_score']:.1f}\n")
                     
                     f.write(f"Files Generated: {summary.get('files_generated', 0)}\n")
-                    f.write(f"Errors: {summary.get('errors_count', 0)}\n\n")
+                    f.write(f"Errors: {summary.get('errors_count', 0)}\n")
+                    
+                    # Add console error information
+                    desktop_errors = results.get('desktop', {}).get('error_count', 0)
+                    mobile_errors = results.get('mobile', {}).get('error_count', 0)
+                    if desktop_errors > 0 or mobile_errors > 0:
+                        f.write(f"Console Errors - Desktop: {desktop_errors}, Mobile: {mobile_errors}\n")
+                    else:
+                        f.write("Console Errors - None found (clean)\n")
+                    
+                    f.write("\n")
                 
                 # Overall summary
                 f.write("Overall Summary\n")
@@ -648,12 +698,190 @@ class WebsiteAnalyzer:
                 if mobile_scores:
                     f.write(f"Average Mobile Score: {sum(mobile_scores) / len(mobile_scores):.1f}\n")
                 
+                # --- Score Breakdown Table ---
+                f.write("\nScore Breakdown Table\n")
+                f.write("=" * 40 + "\n")
+                f.write("         |   Score (per URL)                | Avg\n")
+                f.write("---------|-----------------------------------|------\n")
+                f.write("Mobile   | " + " ".join(str(s) for s in mobile_scores) + f" | {sum(mobile_scores)} | {sum(mobile_scores)/len(mobile_scores) if mobile_scores else 0:.1f}\n")
+                f.write("Desktop  | " + " ".join(str(s) for s in desktop_scores) + f" | {sum(desktop_scores)} | {sum(desktop_scores)/len(desktop_scores) if desktop_scores else 0:.1f}\n")
+                
                 f.write(f"\nOutput Directory: {self.output_dir}\n")
             
             self.logger.info(f"Summary report generated: {report_path}")
             
         except Exception as e:
             self.logger.error(f"Error generating summary report: {str(e)}")
+    
+    def _generate_error_log_summary(self):
+        """Generate a detailed error log summary report"""
+        try:
+            report_path = os.path.join(self.output_dir, 'error_log_summary.txt')
+            self.logger.info(f"Generating error log summary at: {report_path}")
+            
+            with open(report_path, 'w') as f:
+                f.write("Website Error Capture Summary Report\n")
+                f.write("=" * 40 + "\n\n")
+                f.write(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"URLs Analyzed: {len(self.urls)}\n\n")
+                
+                # Overall error statistics
+                total_urls_with_errors = 0
+                total_errors_found = 0
+                error_types_summary = {
+                    'console_errors': 0,
+                    'page_errors': 0,
+                    'browser_logs': 0,
+                    'scroll_errors': 0
+                }
+                
+                for url, results in self.results.items():
+                    self.logger.info(f"Processing error summary for URL: {url}")
+                    f.write(f"URL: {url}\n")
+                    f.write("-" * 50 + "\n")
+                    
+                    for viewport in ['desktop', 'mobile']:
+                        viewport_data = results.get(viewport, {})
+                        error_count = viewport_data.get('error_count', 0)
+                        error_log_path = viewport_data.get('error_log_path')
+                        
+                        f.write(f"\n{viewport.upper()} VIEWPORT:\n")
+                        
+                        if error_log_path and os.path.exists(error_log_path):
+                            self.logger.info(f"Reading error log: {error_log_path}")
+                            try:
+                                import json
+                                with open(error_log_path, 'r') as error_file:
+                                    error_data = json.load(error_file)
+                                
+                                # Check capture status
+                                capture_status = error_data.get('capture_status', 'unknown')
+                                self.logger.info(f"Capture status for {url} ({viewport}): {capture_status}")
+                                if capture_status == 'success':
+                                    has_errors = error_data.get('error_summary', {}).get('has_errors', False)
+                                    total_errors = error_data.get('total_errors', 0)
+                                    self.logger.info(f"Error summary for {url} ({viewport}): has_errors={has_errors}, total_errors={total_errors}")
+                                    
+                                    if has_errors:
+                                        total_urls_with_errors += 1
+                                        total_errors_found += total_errors
+                                        
+                                        f.write(f"  Status: ERRORS FOUND ({error_data.get('total_errors', 0)} total)\n")
+                                        
+                                        # Error type breakdown
+                                        error_types = error_data.get('error_summary', {}).get('error_types_found', [])
+                                        if error_types:
+                                            f.write(f"  Error Types: {', '.join(error_types)}\n")
+                                        
+                                        # Detailed error counts - also check scroll errors
+                                        console_count = len(error_data.get('console_errors', []))
+                                        page_count = len(error_data.get('page_errors', []))
+                                        browser_count = len(error_data.get('browser_logs', []))
+                                        scroll_count = len(error_data.get('scroll_errors', []))
+                                        
+                                        # Aggregate errors from scroll positions
+                                        scroll_console_errors = []
+                                        scroll_page_errors = []
+                                        scroll_browser_logs = []
+                                        
+                                        for scroll_error in error_data.get('scroll_errors', []):
+                                            scroll_errors_data = scroll_error.get('errors', {})
+                                            scroll_console_errors.extend(scroll_errors_data.get('console_errors', []))
+                                            scroll_page_errors.extend(scroll_errors_data.get('page_errors', []))
+                                            scroll_browser_logs.extend(scroll_errors_data.get('browser_logs', []))
+                                        
+                                        # Add scroll errors to totals
+                                        console_count += len(scroll_console_errors)
+                                        page_count += len(scroll_page_errors)
+                                        browser_count += len(scroll_browser_logs)
+                                        
+                                        if console_count > 0:
+                                            f.write(f"  Console Errors: {console_count}\n")
+                                            error_types_summary['console_errors'] += console_count
+                                        if page_count > 0:
+                                            f.write(f"  Page Errors: {page_count}\n")
+                                            error_types_summary['page_errors'] += page_count
+                                        if browser_count > 0:
+                                            f.write(f"  Browser Logs: {browser_count}\n")
+                                            error_types_summary['browser_logs'] += browser_count
+                                        if scroll_count > 0:
+                                            f.write(f"  Scroll Positions with Errors: {scroll_count}\n")
+                                            error_types_summary['scroll_errors'] += scroll_count
+                                        
+                                        # Show some example errors (including from scroll positions)
+                                        all_console_errors = error_data.get('console_errors', []) + scroll_console_errors
+                                        if all_console_errors:
+                                            f.write(f"  Sample Console Errors:\n")
+                                            for i, error in enumerate(all_console_errors[:3]):  # Show first 3
+                                                message = error.get('message', 'Unknown error')
+                                                f.write(f"    {i+1}. {message[:100]}{'...' if len(message) > 100 else ''}\n")
+                                        
+                                        all_browser_logs = error_data.get('browser_logs', []) + scroll_browser_logs
+                                        if all_browser_logs:
+                                            f.write(f"  Sample Browser Logs:\n")
+                                            for i, log in enumerate(all_browser_logs[:3]):  # Show first 3
+                                                message = log.get('message', 'Unknown log')
+                                                level = log.get('level', 'UNKNOWN')
+                                                f.write(f"    {i+1}. [{level}] {message[:100]}{'...' if len(message) > 100 else ''}\n")
+                                        
+                                    else:
+                                        f.write(f"  Status: CLEAN (No errors found)\n")
+                                else:
+                                    f.write(f"  Status: CAPTURE FAILED\n")
+                                    if 'capture_error' in error_data:
+                                        f.write(f"  Error: {error_data['capture_error']}\n")
+                                
+                                # Timestamp
+                                capture_time = error_data.get('capture_timestamp')
+                                if capture_time:
+                                    dt = datetime.fromtimestamp(capture_time)
+                                    f.write(f"  Captured: {dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                                
+                            except Exception as e:
+                                self.logger.error(f"Error reading error log {error_log_path}: {str(e)}")
+                                f.write(f"  Status: ERROR READING LOG ({str(e)})\n")
+                        else:
+                            self.logger.warning(f"No error log found at: {error_log_path}")
+                            f.write(f"  Status: NO ERROR LOG FOUND\n")
+                    
+                    f.write("\n")
+                
+                # Overall summary
+                f.write("OVERALL ERROR SUMMARY\n")
+                f.write("-" * 30 + "\n")
+                f.write(f"URLs with Errors: {total_urls_with_errors}/{len(self.urls)}\n")
+                f.write(f"Total Errors Found: {total_errors_found}\n")
+                f.write(f"Clean URLs: {len(self.urls) - total_urls_with_errors}\n\n")
+                
+                if total_errors_found > 0:
+                    f.write("Error Type Breakdown:\n")
+                    for error_type, count in error_types_summary.items():
+                        if count > 0:
+                            f.write(f"  {error_type.replace('_', ' ').title()}: {count}\n")
+                
+                # Recommendations
+                f.write("\nRECOMMENDATIONS:\n")
+                f.write("-" * 20 + "\n")
+                if total_urls_with_errors == 0:
+                    f.write("✓ All URLs appear to be error-free\n")
+                    f.write("✓ No immediate action required\n")
+                else:
+                    f.write(f"⚠ {total_urls_with_errors} URL(s) have errors that should be investigated\n")
+                    if error_types_summary['console_errors'] > 0:
+                        f.write("  - Review JavaScript console errors\n")
+                    if error_types_summary['browser_logs'] > 0:
+                        f.write("  - Check browser-level errors and warnings\n")
+                    if error_types_summary['page_errors'] > 0:
+                        f.write("  - Review page error elements and user-facing error messages\n")
+                    if error_types_summary['scroll_errors'] > 0:
+                        f.write("  - Investigate errors that appear during page scrolling\n")
+                
+                f.write(f"\nDetailed error logs available in: {self.output_dir}/screenshots/\n")
+            
+            self.logger.info(f"Error log summary generated: {report_path}")
+            
+        except Exception as e:
+            self.logger.error(f"Error generating error log summary: {str(e)}")
     
     def get_results(self) -> Dict[str, Any]:
         """Get analysis results"""

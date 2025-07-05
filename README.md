@@ -69,43 +69,67 @@ A comprehensive website analysis tool that automates performance testing, visual
 
 ## 🚀 Usage
 
+### Headless Mode (Default)
+By default, the tool runs in **headless mode** (no browser UI). This is suitable for automated and CI/CD environments.
+
+## Running with Browser UI (Non-Headless)
+To see the browser window during analysis, use the `--no-headless` flag:
+
+```bash
+python main.py --urls "https://example.com" --no-headless
+```
+
+Or, edit `config.py` and set:
+```python
+BROWSER_CONFIG = {
+    'headless': False,  # Show browser UI
+    'window_size': {
+        'desktop': (1920, 1080),
+        'mobile': (500, 800)
+    }
+}
+```
+
 ### Basic Usage
 
 ```bash
-# Interactive mode
+# Interactive mode (headless by default)
 python main.py
 
-# Command line with URLs
+# Command line with URLs (headless by default)
 python main.py --urls "https://example.com,https://google.com"
 
-# Headless mode (no browser UI)
+# Explicitly run in headless mode (default)
 python main.py --urls "example.com" --headless
+
+# Run with browser UI (not headless)
+python main.py --urls "example.com" --no-headless
 ```
 
 ### Module-Specific Testing
 
 ```bash
 # PageSpeed analysis only
-python main.py --urls "example.com" --score --headless
+python main.py --urls "example.com" --score
 
 # Screenshots only
-python main.py --urls "example.com" --screenshot --headless
+python main.py --urls "example.com" --screenshot
 
 # Video recording only
-python main.py --urls "example.com" --record --headless
+python main.py --urls "example.com" --record
 
 # All modules (default)
-python main.py --urls "example.com" --all --headless
+python main.py --urls "example.com" --all
 ```
 
 ### Advanced Usage
 
 ```bash
 # Multiple URLs with verbose logging
-python main.py --urls "site1.com,site2.com,site3.com" --verbose --headless
+python main.py --urls "site1.com,site2.com,site3.com" --verbose
 
-# Single URL with all modules
-python main.py --urls "example.com" --all --headless
+# Single URL with all modules, browser UI
+python main.py --urls "example.com" --all --no-headless
 ```
 
 ## 📁 Output Structure
@@ -188,7 +212,7 @@ VIDEO_CONFIG = {
 ```python
 # config.py
 BROWSER_CONFIG = {
-    'headless': False,    # Show browser UI
+    'headless': True,    # Headless mode is now the default
     'window_size': {
         'desktop': (1920, 1080),
         'mobile': (500, 800)
@@ -241,4 +265,3 @@ chmod 755 outputs/
 # Reduce video quality or duration in config.py
 VIDEO_CONFIG['fps'] = 15  # Lower FPS
 VIDEO_CONFIG['duration'] = 20  # Shorter duration
-``

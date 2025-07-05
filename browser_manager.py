@@ -91,6 +91,66 @@ class BrowserManager:
             # Wait for page to load
             self.wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
             
+            # Inject console error listener
+            self.driver.execute_script("""
+                // Initialize console error storage
+                window.consoleErrors = [];
+                
+                // Override console.error to capture errors
+                const originalError = console.error;
+                console.error = function(...args) {
+                    // Call original console.error
+                    originalError.apply(console, args);
+                    
+                    // Store error information
+                    const errorInfo = {
+                        message: args.join(' '),
+                        timestamp: new Date().toISOString(),
+                        stack: new Error().stack
+                    };
+                    window.consoleErrors.push(errorInfo);
+                };
+                
+                // Override console.warn to capture warnings
+                const originalWarn = console.warn;
+                console.warn = function(...args) {
+                    // Call original console.warn
+                    originalWarn.apply(console, args);
+                    
+                    // Store warning information
+                    const warnInfo = {
+                        message: args.join(' '),
+                        timestamp: new Date().toISOString(),
+                        type: 'warning'
+                    };
+                    window.consoleErrors.push(warnInfo);
+                };
+                
+                // Listen for unhandled errors
+                window.addEventListener('error', function(event) {
+                    const errorInfo = {
+                        message: event.message || 'Unhandled error',
+                        filename: event.filename,
+                        lineno: event.lineno,
+                        colno: event.colno,
+                        timestamp: new Date().toISOString(),
+                        type: 'unhandled'
+                    };
+                    window.consoleErrors.push(errorInfo);
+                });
+                
+                // Listen for unhandled promise rejections
+                window.addEventListener('unhandledrejection', function(event) {
+                    const errorInfo = {
+                        message: event.reason?.message || 'Unhandled promise rejection',
+                        reason: event.reason,
+                        timestamp: new Date().toISOString(),
+                        type: 'unhandled_promise'
+                    };
+                    window.consoleErrors.push(errorInfo);
+                });
+            """)
+            
             # Additional wait for dynamic content
             time.sleep(NAVIGATION_CONFIG['pause_between_actions'])
             
@@ -270,4 +330,231 @@ class BrowserManager:
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit"""
-        self.close() 
+        self.close()
+
+    def get_console_errors(self):
+        """
+        Get console errors from the page
+        
+        Returns:
+            dict: Console error information
+        """
+        try:
+            # Execute JavaScript to get console errors
+            console_errors = self.driver.execute_script("""
+                // Return any console errors that might be stored
+                return window.consoleErrors || [];
+            """)
+            
+            # Also try to get any error messages from the page
+            error_elements = self.driver.find_elements(By.CSS_SELECTOR, "[class*='error'], [id*='error'], .alert-danger, .error-message, .error, [data-error]")
+            page_errors = []
+            
+            for element in error_elements:
+                try:
+                    text = element.text.strip()
+                    if text:
+                        page_errors.append({
+                            'message': text,
+                            'element': element.tag_name,
+                            'timestamp': time.time()
+                        })
+                except:
+                    continue
+            
+            # Get browser console logs using CDP (Chrome DevTools Protocol)
+            try:
+                logs = self.driver.get_log('browser')
+                browser_logs = []
+                for log in logs:
+                    if log['level'] in ['SEVERE', 'WARNING']:
+                        browser_logs.append({
+                            'message': log['message'],
+                            'level': log['level'],
+                            'timestamp': log['timestamp']
+                        })
+            except Exception as e:
+                self.logger.warning(f"Could not get browser logs: {str(e)}")
+                browser_logs = []
+            
+            total_errors = len(console_errors) + len(page_errors) + len(browser_logs)
+            return {
+                'console_errors': console_errors,
+                'page_errors': page_errors,
+                'browser_logs': browser_logs,
+                'total_errors': total_errors,
+                'capture_timestamp': time.time(),
+                'has_errors': total_errors > 0,
+                'error_types': {
+                    'console_errors': len(console_errors),
+                    'page_errors': len(page_errors),
+                    'browser_logs': len(browser_logs)
+                }
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error getting console errors: {str(e)}")
+            return {
+                'console_errors': [], 
+                'page_errors': [], 
+                'browser_logs': [], 
+                'total_errors': 0,
+                'capture_timestamp': time.time(),
+                'has_errors': False,
+                'capture_error': str(e),
+                'error_types': {
+                    'console_errors': 0,
+                    'page_errors': 0,
+                    'browser_logs': 0
+                }
+            }
+
+    def scroll_and_capture_errors(self, duration=10):
+        """
+        Scroll through the page and capture any errors that appear
+        
+        Args:
+            duration (int): Duration to scroll in seconds
+            
+        Returns:
+            dict: Error information collected during scroll
+        """
+        try:
+            self.logger.info(f"Starting error capture scroll for {duration} seconds")
+            
+            # Initialize error tracking
+            all_errors = {
+                'console_errors': [],
+                'page_errors': [],
+                'browser_logs': [],
+                'scroll_errors': [],
+                'capture_timestamp': time.time(),
+                'capture_status': 'success',
+                'total_errors': 0,
+                'error_summary': {
+                    'has_errors': False,
+                    'error_types_found': [],
+                    'scroll_positions_with_errors': []
+                }
+            }
+            
+            # Get initial page height
+            total_height = self.driver.execute_script("return document.body.scrollHeight")
+            viewport_height = self.driver.execute_script("return window.innerHeight")
+            
+            # Scroll to bottom first to trigger any lazy loading
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(2)
+            
+            # Get updated page height after potential lazy loading
+            updated_height = self.driver.execute_script("return document.body.scrollHeight")
+            if updated_height > total_height:
+                total_height = updated_height
+                self.logger.info(f"Page height updated to {total_height}px after lazy loading")
+            
+            # Scroll back to top
+            self.driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(1)
+            
+            # Calculate scroll parameters
+            scroll_distance = total_height - viewport_height
+            if scroll_distance <= 0:
+                scroll_distance = total_height
+            
+            steps = 10
+            step_distance = scroll_distance / steps
+            step_duration = duration / steps
+            
+            # Start from top
+            current_position = 0
+            
+            # Smooth scroll from top to bottom and capture errors
+            for i in range(steps):
+                # Calculate next position
+                current_position += step_distance
+                
+                # Ensure we don't exceed the total height
+                if current_position > total_height:
+                    current_position = total_height
+                
+                # Use smooth scrolling
+                self.driver.execute_script(f"""
+                    window.scrollTo({{
+                        top: {current_position},
+                        behavior: 'smooth'
+                    }});
+                """)
+                
+                # Wait for smooth scroll to complete
+                time.sleep(step_duration)
+                
+                # Capture errors at this scroll position
+                current_errors = self.get_console_errors()
+                if current_errors['total_errors'] > 0:
+                    all_errors['scroll_errors'].append({
+                        'position': current_position,
+                        'errors': current_errors
+                    })
+                
+                # Log progress
+                progress = ((i + 1) / steps) * 100
+                self.logger.info(f"Error capture scroll progress: {progress:.1f}%")
+            
+            # Final scroll to ensure we reach the very bottom
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(2)
+            
+            # Final error capture
+            final_errors = self.get_console_errors()
+            all_errors['console_errors'] = final_errors['console_errors']
+            all_errors['page_errors'] = final_errors['page_errors']
+            all_errors['browser_logs'] = final_errors['browser_logs']
+            
+            # Calculate total errors and update summary
+            total_errors = len(all_errors['console_errors']) + len(all_errors['page_errors']) + len(all_errors['browser_logs']) + len(all_errors['scroll_errors'])
+            all_errors['total_errors'] = total_errors
+            
+            # Update error summary
+            all_errors['error_summary']['has_errors'] = total_errors > 0
+            
+            # Track error types found
+            error_types = set()
+            if all_errors['console_errors']:
+                error_types.add('console_errors')
+            if all_errors['page_errors']:
+                error_types.add('page_errors')
+            if all_errors['browser_logs']:
+                error_types.add('browser_logs')
+            if all_errors['scroll_errors']:
+                error_types.add('scroll_errors')
+            
+            all_errors['error_summary']['error_types_found'] = list(error_types)
+            
+            # Track scroll positions with errors
+            for scroll_error in all_errors['scroll_errors']:
+                all_errors['error_summary']['scroll_positions_with_errors'].append(scroll_error['position'])
+            
+            if total_errors > 0:
+                self.logger.info(f"Error capture scroll completed. Found {total_errors} total errors across {len(all_errors['scroll_errors'])} scroll positions")
+            else:
+                self.logger.info(f"Error capture scroll completed. No errors found - page appears to be error-free")
+            
+            return all_errors
+            
+        except Exception as e:
+            self.logger.error(f"Error during error capture scroll: {str(e)}")
+            return {
+                'console_errors': [], 
+                'page_errors': [], 
+                'browser_logs': [],
+                'scroll_errors': [],
+                'capture_timestamp': time.time(),
+                'capture_status': 'failed',
+                'capture_error': str(e),
+                'total_errors': 0,
+                'error_summary': {
+                    'has_errors': False,
+                    'error_types_found': [],
+                    'scroll_positions_with_errors': []
+                }
+            } 

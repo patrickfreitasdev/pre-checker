@@ -7,7 +7,7 @@ from datetime import datetime
 
 # Browser Configuration
 BROWSER_CONFIG = {
-    'headless': False,  # Set to True for headless mode
+    'headless': True,  # Set to True for headless mode (default)
     'window_size': {
         'desktop': (1920, 1080),
         'mobile': (375, 667)  # iPhone 6/7/8 size

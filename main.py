@@ -153,6 +153,23 @@ def display_results(analyzer: WebsiteAnalyzer):
         console.print(f"  Total Files Generated: {total_files}")
         console.print(f"  Total Errors: {total_errors}")
     
+    # Print the score breakdown table in the terminal with better alignment
+    if total_mobile_scores or total_desktop_scores:
+        print("\nScore Breakdown Table")
+        print("=" * 40)
+        print("         |   Score (per URL)                | Sum  | Avg")
+        print("---------|-----------------------------------|------|------")
+        print("Mobile   | {:<33} | {:<4} | {:<4.1f}".format(
+            " ".join(str(s) for s in total_mobile_scores),
+            sum(total_mobile_scores),
+            sum(total_mobile_scores)/len(total_mobile_scores) if total_mobile_scores else 0
+        ))
+        print("Desktop  | {:<33} | {:<4} | {:<4.1f}".format(
+            " ".join(str(s) for s in total_desktop_scores),
+            sum(total_desktop_scores),
+            sum(total_desktop_scores)/len(total_desktop_scores) if total_desktop_scores else 0
+        ))
+    
     # Display output directory
     output_dir = analyzer.get_output_directory()
     console.print(f"\n[bold green]Output Directory:[/bold green] {output_dir}")
