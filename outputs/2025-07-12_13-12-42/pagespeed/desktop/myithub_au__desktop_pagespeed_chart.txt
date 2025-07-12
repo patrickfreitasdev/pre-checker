@@ -1,9 +1,0 @@
-PageSpeed Performance Chart
-========================================
-
-MOBILE Performance: ████████░░ 80/100
-Status: Good
-
-DESKTOP Performance: ████████░░ 80/100
-Status: Good
-
