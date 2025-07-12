@@ -337,9 +337,12 @@ class BrowserVideoRecorder:
 
     def _record_browser(self):
         try:
-            frames = []
             start_time = time.time()
             frame_interval = 1.0 / self.fps
+            
+            # Initialize video writer
+            first_frame = None
+            video_writer = None
             
             while self.is_recording:
                 try:
@@ -351,7 +354,34 @@ class BrowserVideoRecorder:
                     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                     
                     if frame is not None:
-                        frames.append(frame)
+                        # Store first frame for video writer initialization
+                        if first_frame is None:
+                            first_frame = frame
+                            height, width = frame.shape[:2]
+                            
+                            # Ensure dimensions are divisible by 16 for better codec compatibility
+                            width = (width // 16) * 16
+                            height = (height // 16) * 16
+                            
+                            # Initialize video writer with proper codec
+                            fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Use MP4V codec for better compatibility
+                            video_writer = cv2.VideoWriter(
+                                self.output_path,
+                                fourcc,
+                                self.fps,
+                                (width, height)
+                            )
+                            
+                            if not video_writer.isOpened():
+                                self.logger.error("Failed to open video writer")
+                                break
+                        
+                        # Resize frame if needed
+                        if frame.shape[:2] != (height, width):
+                            frame = cv2.resize(frame, (width, height))
+                        
+                        # Write frame (OpenCV expects BGR format, which is what we have)
+                        video_writer.write(frame)
                     
                     time.sleep(frame_interval)
                     
@@ -360,12 +390,10 @@ class BrowserVideoRecorder:
                     time.sleep(frame_interval)
                     continue
             
-            if frames:
-                # Ensure output directory exists
-                os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
-                # Write video
-                imageio.mimsave(self.output_path, frames, fps=self.fps)
-                self.logger.info(f"Browser recording completed. Frames captured: {len(frames)}")
+            # Clean up video writer
+            if video_writer:
+                video_writer.release()
+                self.logger.info(f"Browser recording completed successfully")
             else:
                 self.logger.warning("No frames captured during recording")
                 

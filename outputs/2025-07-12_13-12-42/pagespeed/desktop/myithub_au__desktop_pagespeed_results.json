@@ -1,0 +1,32 @@
+{
+  "mobile": {
+    "url": "https://www.myithub.com.au/",
+    "strategy": "mobile",
+    "score": 80,
+    "metrics": {
+      "load_time": 1879,
+      "dom_ready_time": 1667,
+      "first_paint": 1628,
+      "page_size": 6526080,
+      "viewport_size": 1806720
+    },
+    "timestamp": 1752326167.06159,
+    "fallback": true,
+    "note": "Using fallback analyzer due to API rate limit"
+  },
+  "desktop": {
+    "url": "https://www.myithub.com.au/",
+    "strategy": "desktop",
+    "score": 80,
+    "metrics": {
+      "load_time": 1039,
+      "dom_ready_time": 1028,
+      "first_paint": 860,
+      "page_size": 6526080,
+      "viewport_size": 1806720
+    },
+    "timestamp": 1752326189.407968,
+    "fallback": true,
+    "note": "Using fallback analyzer due to API rate limit"
+  }
+}

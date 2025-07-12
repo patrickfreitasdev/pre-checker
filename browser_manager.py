@@ -154,6 +154,9 @@ class BrowserManager:
             # Additional wait for dynamic content
             time.sleep(NAVIGATION_CONFIG['pause_between_actions'])
             
+            # Handle delayed CSS loading (WP Rocket/Hummingbird optimization)
+            self._handle_delayed_css()
+            
             self.logger.info(f"Successfully navigated to: {url}")
             return True
             
@@ -331,6 +334,70 @@ class BrowserManager:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit"""
         self.close()
+
+    def _handle_delayed_css(self):
+        """
+        Handle delayed CSS loading for WP Rocket/Hummingbird optimization
+        
+        This method detects and triggers delayed CSS loading by:
+        1. Checking for delayed stylesheet elements
+        2. Triggering user interaction events
+        3. Directly setting href attributes for delayed stylesheets
+        """
+        try:
+            self.logger.info("Checking for delayed CSS...")
+            
+            # Check if delayed CSS is present
+            has_delayed_css = self.driver.execute_script("""
+                return document.querySelectorAll('link[data-wphbdelayedstyle]').length > 0;
+            """)
+            
+            self.logger.info(f"Delayed CSS elements found: {has_delayed_css}")
+            
+            if has_delayed_css:
+                self.logger.info("Detected delayed CSS (WP Rocket/Hummingbird), triggering user events...")
+                
+                # Get count of delayed stylesheets
+                delayed_count = self.driver.execute_script("""
+                    return document.querySelectorAll('link[data-wphbdelayedstyle]').length;
+                """)
+                self.logger.info(f"Found {delayed_count} delayed stylesheets")
+                
+                # Trigger events that would normally load delayed CSS
+                events = ['keydown', 'mousemove', 'wheel', 'touchmove', 'touchstart', 'touchend']
+                for event in events:
+                    self.driver.execute_script(f"""
+                        window.dispatchEvent(new Event('{event}', {{ bubbles: true }}));
+                    """)
+                
+                # Directly trigger the delayed stylesheet loading
+                self.driver.execute_script("""
+                    const delayedLinks = document.querySelectorAll('link[data-wphbdelayedstyle]');
+                    delayedLinks.forEach(link => {
+                        link.setAttribute('href', link.getAttribute('data-wphbdelayedstyle'));
+                    });
+                """)
+                
+                # Wait for the delayed CSS to load
+                time.sleep(3)
+                
+                # Check if CSS is actually applied to the page
+                css_applied = self.driver.execute_script("""
+                    const computedStyles = window.getComputedStyle(document.body);
+                    return computedStyles.fontFamily !== 'serif' && 
+                           computedStyles.fontFamily !== 'Times' &&
+                           computedStyles.fontSize !== '16px';
+                """)
+                
+                if css_applied:
+                    self.logger.info("Delayed CSS successfully loaded and applied")
+                else:
+                    self.logger.warning("Delayed CSS may not be fully applied")
+            else:
+                self.logger.info("No delayed CSS detected")
+                    
+        except Exception as e:
+            self.logger.error(f"Error handling delayed CSS: {str(e)}")
 
     def get_console_errors(self):
         """

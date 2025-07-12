@@ -25,7 +25,7 @@ VIDEO_CONFIG = {
     'scroll_pause': 0.3,  # seconds to pause between scrolls (reduced for smoother video)
     'scroll_steps': 30,  # number of scroll steps per page (increased for smoother video recording)
     'output_format': 'mp4',
-    'codec': 'MJPG'
+    'codec': 'libx264'  # Better codec for color accuracy
 }
 
 # Screenshot Configuration

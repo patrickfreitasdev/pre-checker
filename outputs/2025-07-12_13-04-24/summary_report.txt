@@ -1,0 +1,25 @@
+Website Optimization Pre-Check Summary Report
+==================================================
+
+Analysis Date: 2025-07-12 13:09:10
+URLs Analyzed: 1
+
+URL: https://www.myithub.com.au/
+------------------------------
+Files Generated: 4
+Errors: 0
+Console Errors - None found (clean)
+
+Overall Summary
+------------------------------
+Total Files Generated: 4
+Total Errors: 0
+
+Score Breakdown Table
+========================================
+         |   Score (per URL)                | Avg
+---------|-----------------------------------|------
+Mobile   |  | 0 | 0.0
+Desktop  |  | 0 | 0.0
+
+Output Directory: outputs/2025-07-12_13-04-24

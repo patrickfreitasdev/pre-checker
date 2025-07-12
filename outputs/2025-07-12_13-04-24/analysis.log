@@ -1,0 +1,62 @@
+2025-07-12 13:04:24,834 - website_analyzer - INFO - Starting analysis of 1 URLs
+2025-07-12 13:04:24,834 - website_analyzer - INFO - Processing URL 1/1: https://www.myithub.com.au/
+2025-07-12 13:04:24,834 - website_analyzer - INFO - Analyzing https://www.myithub.com.au/ for desktop viewport
+2025-07-12 13:04:24,834 - WDM - INFO - ====== WebDriver manager ======
+2025-07-12 13:04:26,100 - WDM - INFO - Get LATEST chromedriver version for google-chrome
+2025-07-12 13:04:26,643 - WDM - INFO - Get LATEST chromedriver version for google-chrome
+2025-07-12 13:04:26,770 - WDM - INFO - Driver [/Users/patrickdefreitas/.wdm/drivers/chromedriver/mac64/138.0.7204.94/chromedriver-mac-x64/chromedriver] found in cache
+2025-07-12 13:04:34,373 - browser_manager - INFO - Browser driver setup complete for desktop viewport
+2025-07-12 13:04:37,373 - website_analyzer - INFO - Starting error capture scroll for https://www.myithub.com.au/ (desktop)
+2025-07-12 13:04:37,374 - browser_manager - INFO - Starting error capture scroll for 15 seconds
+2025-07-12 13:04:52,066 - browser_manager - INFO - Error capture scroll progress: 10.0%
+2025-07-12 13:05:03,611 - browser_manager - INFO - Error capture scroll progress: 20.0%
+2025-07-12 13:05:15,167 - browser_manager - INFO - Error capture scroll progress: 30.0%
+2025-07-12 13:05:26,740 - browser_manager - INFO - Error capture scroll progress: 40.0%
+2025-07-12 13:05:38,269 - browser_manager - INFO - Error capture scroll progress: 50.0%
+2025-07-12 13:05:49,798 - browser_manager - INFO - Error capture scroll progress: 60.0%
+2025-07-12 13:06:01,340 - browser_manager - INFO - Error capture scroll progress: 70.0%
+2025-07-12 13:06:12,868 - browser_manager - INFO - Error capture scroll progress: 80.0%
+2025-07-12 13:06:24,433 - browser_manager - INFO - Error capture scroll progress: 90.0%
+2025-07-12 13:06:35,998 - browser_manager - INFO - Error capture scroll progress: 100.0%
+2025-07-12 13:06:48,031 - browser_manager - INFO - Error capture scroll completed. No errors found - page appears to be error-free
+2025-07-12 13:06:48,032 - website_analyzer - INFO - Error capture completed for https://www.myithub.com.au/ (desktop): No errors found - page appears to be error-free
+2025-07-12 13:06:48,032 - browser_manager - INFO - Taking screenshot: outputs/2025-07-12_13-04-24/screenshots/desktop/myithub_au__desktop.png
+2025-07-12 13:06:48,460 - browser_manager - INFO - Screenshot saved: outputs/2025-07-12_13-04-24/screenshots/desktop/myithub_au__desktop.png
+2025-07-12 13:06:48,460 - website_analyzer - INFO - Page screenshot saved: outputs/2025-07-12_13-04-24/screenshots/desktop/myithub_au__desktop.png
+2025-07-12 13:06:48,577 - browser_manager - INFO - Browser closed successfully
+2025-07-12 13:06:48,578 - website_analyzer - INFO - Analyzing https://www.myithub.com.au/ for mobile viewport
+2025-07-12 13:06:48,579 - WDM - INFO - ====== WebDriver manager ======
+2025-07-12 13:06:49,242 - WDM - INFO - Get LATEST chromedriver version for google-chrome
+2025-07-12 13:06:49,383 - WDM - INFO - Get LATEST chromedriver version for google-chrome
+2025-07-12 13:06:49,512 - WDM - INFO - Driver [/Users/patrickdefreitas/.wdm/drivers/chromedriver/mac64/138.0.7204.94/chromedriver-mac-x64/chromedriver] found in cache
+2025-07-12 13:06:56,562 - browser_manager - INFO - Browser driver setup complete for mobile viewport
+2025-07-12 13:06:59,566 - website_analyzer - INFO - Starting error capture scroll for https://www.myithub.com.au/ (mobile)
+2025-07-12 13:06:59,567 - browser_manager - INFO - Starting error capture scroll for 15 seconds
+2025-07-12 13:07:14,230 - browser_manager - INFO - Error capture scroll progress: 10.0%
+2025-07-12 13:07:25,739 - browser_manager - INFO - Error capture scroll progress: 20.0%
+2025-07-12 13:07:37,253 - browser_manager - INFO - Error capture scroll progress: 30.0%
+2025-07-12 13:07:48,784 - browser_manager - INFO - Error capture scroll progress: 40.0%
+2025-07-12 13:08:00,309 - browser_manager - INFO - Error capture scroll progress: 50.0%
+2025-07-12 13:08:11,835 - browser_manager - INFO - Error capture scroll progress: 60.0%
+2025-07-12 13:08:23,440 - browser_manager - INFO - Error capture scroll progress: 70.0%
+2025-07-12 13:08:34,960 - browser_manager - INFO - Error capture scroll progress: 80.0%
+2025-07-12 13:08:46,522 - browser_manager - INFO - Error capture scroll progress: 90.0%
+2025-07-12 13:08:58,054 - browser_manager - INFO - Error capture scroll progress: 100.0%
+2025-07-12 13:09:10,113 - browser_manager - INFO - Error capture scroll completed. No errors found - page appears to be error-free
+2025-07-12 13:09:10,113 - website_analyzer - INFO - Error capture completed for https://www.myithub.com.au/ (mobile): No errors found - page appears to be error-free
+2025-07-12 13:09:10,114 - browser_manager - INFO - Taking screenshot: outputs/2025-07-12_13-04-24/screenshots/mobile/myithub_au__mobile.png
+2025-07-12 13:09:10,831 - browser_manager - INFO - Screenshot saved: outputs/2025-07-12_13-04-24/screenshots/mobile/myithub_au__mobile.png
+2025-07-12 13:09:10,831 - website_analyzer - INFO - Page screenshot saved: outputs/2025-07-12_13-04-24/screenshots/mobile/myithub_au__mobile.png
+2025-07-12 13:09:10,952 - browser_manager - INFO - Browser closed successfully
+2025-07-12 13:09:10,953 - website_analyzer - INFO - Completed analysis for https://www.myithub.com.au/
+2025-07-12 13:09:10,953 - website_analyzer - INFO - Summary report generated: outputs/2025-07-12_13-04-24/summary_report.txt
+2025-07-12 13:09:10,953 - website_analyzer - INFO - Generating error log summary at: outputs/2025-07-12_13-04-24/error_log_summary.txt
+2025-07-12 13:09:10,954 - website_analyzer - INFO - Processing error summary for URL: https://www.myithub.com.au/
+2025-07-12 13:09:10,954 - website_analyzer - INFO - Reading error log: outputs/2025-07-12_13-04-24/screenshots/desktop/myithub_au__desktop_console_errors.json
+2025-07-12 13:09:10,954 - website_analyzer - INFO - Capture status for https://www.myithub.com.au/ (desktop): success
+2025-07-12 13:09:10,954 - website_analyzer - INFO - Error summary for https://www.myithub.com.au/ (desktop): has_errors=False, total_errors=0
+2025-07-12 13:09:10,954 - website_analyzer - INFO - Reading error log: outputs/2025-07-12_13-04-24/screenshots/mobile/myithub_au__mobile_console_errors.json
+2025-07-12 13:09:10,955 - website_analyzer - INFO - Capture status for https://www.myithub.com.au/ (mobile): success
+2025-07-12 13:09:10,955 - website_analyzer - INFO - Error summary for https://www.myithub.com.au/ (mobile): has_errors=False, total_errors=0
+2025-07-12 13:09:10,955 - website_analyzer - INFO - Error log summary generated: outputs/2025-07-12_13-04-24/error_log_summary.txt
+2025-07-12 13:09:10,955 - website_analyzer - INFO - Analysis completed for all URLs

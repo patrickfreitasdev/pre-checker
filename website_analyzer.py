@@ -530,6 +530,10 @@ class WebsiteAnalyzer:
             page_screenshot_path = os.path.join(screenshot_dir, page_screenshot_filename)
             error_log_path = os.path.join(screenshot_dir, error_log_filename)
             
+            # Navigate to URL if not already navigated
+            if not browser.navigate_to_url(url):
+                raise Exception("Failed to navigate to URL")
+            
             # Wait for page to fully load
             time.sleep(SCREENSHOT_CONFIG['delay'])
             

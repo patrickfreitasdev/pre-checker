@@ -1,0 +1,18 @@
+2025-07-12 13:08:01,552 - website_analyzer - INFO - Starting analysis of 1 URLs
+2025-07-12 13:08:01,552 - website_analyzer - INFO - Processing URL 1/1: https://www.myithub.com.au/
+2025-07-12 13:08:01,552 - website_analyzer - INFO - Analyzing https://www.myithub.com.au/ for desktop viewport
+2025-07-12 13:08:01,552 - WDM - INFO - ====== WebDriver manager ======
+2025-07-12 13:08:02,110 - WDM - INFO - Get LATEST chromedriver version for google-chrome
+2025-07-12 13:08:02,346 - WDM - INFO - Get LATEST chromedriver version for google-chrome
+2025-07-12 13:08:02,544 - WDM - INFO - Driver [/Users/patrickdefreitas/.wdm/drivers/chromedriver/mac64/138.0.7204.94/chromedriver-mac-x64/chromedriver] found in cache
+2025-07-12 13:08:08,785 - browser_manager - INFO - Browser driver setup complete for desktop viewport
+2025-07-12 13:08:11,787 - website_analyzer - INFO - Starting error capture scroll for https://www.myithub.com.au/ (desktop)
+2025-07-12 13:08:11,787 - browser_manager - INFO - Starting error capture scroll for 15 seconds
+2025-07-12 13:08:26,412 - browser_manager - INFO - Error capture scroll progress: 10.0%
+2025-07-12 13:08:37,928 - browser_manager - INFO - Error capture scroll progress: 20.0%
+2025-07-12 13:08:49,491 - browser_manager - INFO - Error capture scroll progress: 30.0%
+2025-07-12 13:09:01,037 - browser_manager - INFO - Error capture scroll progress: 40.0%
+2025-07-12 13:09:02,063 - urllib3.connectionpool - WARNING - Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f8cd0740190>: Failed to establish a new connection: [Errno 61] Connection refused')': /session/ce7ac21a4f42bdecaca90acb4a9d5985
+2025-07-12 13:09:02,064 - urllib3.connectionpool - WARNING - Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f8cd0731250>: Failed to establish a new connection: [Errno 61] Connection refused')': /session/ce7ac21a4f42bdecaca90acb4a9d5985
+2025-07-12 13:09:02,065 - urllib3.connectionpool - WARNING - Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f8cd0731d60>: Failed to establish a new connection: [Errno 61] Connection refused')': /session/ce7ac21a4f42bdecaca90acb4a9d5985
+2025-07-12 13:09:02,067 - browser_manager - INFO - Browser closed successfully
