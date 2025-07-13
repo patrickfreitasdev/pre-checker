@@ -36,6 +36,16 @@ A comprehensive website analysis tool that automates performance testing, visual
 - **Chrome Browser** (for Selenium automation)
 - **FFmpeg** (for video processing)
 
+### 🪟 Windows Compatibility
+The tool includes enhanced Windows compatibility features:
+- **Automatic Chrome version detection**
+- **Multiple fallback strategies** for ChromeDriver installation
+- **Windows-specific Chrome options** for better performance
+- **Comprehensive error handling** with detailed troubleshooting
+- **Test script** for Windows compatibility verification
+
+For Windows-specific issues, see [WINDOWS_TROUBLESHOOTING.md](WINDOWS_TROUBLESHOOTING.md).
+
 ## 🛠️ Installation
 
 1. **Clone the repository**
@@ -130,6 +140,9 @@ python main.py --urls "site1.com,site2.com,site3.com" --verbose
 
 # Single URL with all modules, browser UI
 python main.py --urls "example.com" --all --no-headless
+
+# Test Windows compatibility (Windows users)
+python test_windows_compatibility.py
 ```
 
 ## 📁 Output Structure

@@ -5,6 +5,9 @@ Handles Selenium WebDriver setup and management
 
 import time
 import os
+import platform
+import subprocess
+import sys
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -28,10 +31,83 @@ class BrowserManager:
         self.driver = None
         self.wait = None
         self.logger = logging.getLogger(__name__)
+        self.platform = platform.system().lower()
         
-    def setup_driver(self):
-        """Setup Chrome WebDriver with appropriate configuration"""
+    def _detect_chrome_version(self):
+        """Detect Chrome version for better driver compatibility"""
         try:
+            if self.platform == 'windows':
+                # Try multiple Chrome installation paths on Windows
+                chrome_paths = [
+                    r'C:\Program Files\Google\Chrome\Application\chrome.exe',
+                    r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
+                    r'C:\Users\{}\AppData\Local\Google\Chrome\Application\chrome.exe'.format(os.getenv('USERNAME', '')),
+                ]
+                
+                for path in chrome_paths:
+                    if os.path.exists(path):
+                        result = subprocess.run([path, '--version'], 
+                                             capture_output=True, text=True, timeout=10)
+                        if result.returncode == 0:
+                            version_line = result.stdout.strip()
+                            # Extract version number
+                            if 'Google Chrome' in version_line:
+                                version = version_line.split()[-1]
+                                self.logger.info(f"Detected Chrome version: {version}")
+                                return version
+            else:
+                # Unix-like systems
+                result = subprocess.run(['google-chrome', '--version'], 
+                                     capture_output=True, text=True, timeout=10)
+                if result.returncode == 0:
+                    version_line = result.stdout.strip()
+                    if 'Google Chrome' in version_line:
+                        version = version_line.split()[-1]
+                        self.logger.info(f"Detected Chrome version: {version}")
+                        return version
+                        
+        except Exception as e:
+            self.logger.warning(f"Could not detect Chrome version: {str(e)}")
+        
+        return None
+    
+    def _get_windows_specific_options(self, chrome_options):
+        """Add Windows-specific Chrome options"""
+        if self.platform == 'windows':
+            # Windows-specific options for better compatibility
+            chrome_options.add_argument('--disable-gpu-sandbox')
+            chrome_options.add_argument('--disable-software-rasterizer')
+            chrome_options.add_argument('--disable-background-timer-throttling')
+            chrome_options.add_argument('--disable-backgrounding-occluded-windows')
+            chrome_options.add_argument('--disable-renderer-backgrounding')
+            chrome_options.add_argument('--disable-features=TranslateUI')
+            chrome_options.add_argument('--disable-ipc-flooding-protection')
+            
+            # Handle Windows Defender and antivirus interference
+            chrome_options.add_argument('--disable-extensions-except')
+            chrome_options.add_argument('--disable-component-extensions-with-background-pages')
+            
+            # Better memory management for Windows
+            chrome_options.add_argument('--memory-pressure-off')
+            chrome_options.add_argument('--max_old_space_size=4096')
+            
+            # Disable logging to reduce file system issues
+            chrome_options.add_argument('--disable-logging')
+            chrome_options.add_argument('--log-level=3')
+            
+            # Handle Windows path issues
+            chrome_options.add_argument('--no-first-run')
+            chrome_options.add_argument('--no-default-browser-check')
+            
+        return chrome_options
+    
+
+    
+    def setup_driver(self):
+        """Setup Chrome WebDriver with enhanced Windows compatibility"""
+        try:
+            self.logger.info(f"Setting up browser driver for {self.platform} platform")
+            
             chrome_options = Options()
             
             # Set window size
@@ -42,7 +118,7 @@ class BrowserManager:
             user_agent = BROWSER_CONFIG['user_agent'][self.viewport]
             chrome_options.add_argument(f'--user-agent={user_agent}')
             
-            # Additional options for better performance
+            # Basic options for better performance
             chrome_options.add_argument('--no-sandbox')
             chrome_options.add_argument('--disable-dev-shm-usage')
             chrome_options.add_argument('--disable-gpu')
@@ -50,15 +126,75 @@ class BrowserManager:
             chrome_options.add_argument('--disable-plugins')
             chrome_options.add_argument('--disable-images')  # Faster loading for testing
             
+            # Add Windows-specific options
+            chrome_options = self._get_windows_specific_options(chrome_options)
+            
             # Set headless mode if configured
             if BROWSER_CONFIG['headless']:
-                chrome_options.add_argument('--headless')
+                chrome_options.add_argument('--headless=new')  # Use new headless mode
             
-            # Setup service with automatic driver management
-            service = Service(ChromeDriverManager().install())
+            # Try multiple strategies to get a working service
+            service = None
             
-            # Create driver
-            self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            # Strategy 1: Try WebDriver Manager with version detection
+            try:
+                chrome_version = self._detect_chrome_version()
+                if chrome_version:
+                    self.logger.info(f"Using ChromeDriver for Chrome version: {chrome_version}")
+                    driver_path = ChromeDriverManager(version=chrome_version).install()
+                else:
+                    self.logger.info("Using latest ChromeDriver")
+                    driver_path = ChromeDriverManager().install()
+                
+                service = Service(driver_path)
+                self.logger.info("WebDriver Manager strategy successful")
+                
+            except Exception as e:
+                self.logger.warning(f"WebDriver Manager strategy failed: {str(e)}")
+                
+                # Strategy 2: Try system ChromeDriver
+                try:
+                    result = subprocess.run(['chromedriver', '--version'], 
+                                         capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        self.logger.info("Using system ChromeDriver")
+                        service = Service('chromedriver')
+                    else:
+                        raise Exception("System ChromeDriver not available")
+                except Exception as e2:
+                    self.logger.warning(f"System ChromeDriver strategy failed: {str(e2)}")
+                    
+                    # Strategy 3: Try WebDriver Manager without version detection
+                    try:
+                        self.logger.info("Trying WebDriver Manager without version detection")
+                        driver_path = ChromeDriverManager().install()
+                        service = Service(driver_path)
+                        self.logger.info("Fallback WebDriver Manager strategy successful")
+                    except Exception as e3:
+                        self.logger.error(f"All driver strategies failed: {str(e3)}")
+                        return False
+            
+            # Create driver with enhanced error handling
+            try:
+                self.driver = webdriver.Chrome(service=service, options=chrome_options)
+                self.logger.info("Driver created successfully with full options")
+            except Exception as e:
+                # If the driver creation fails, try with minimal options
+                self.logger.warning(f"Initial driver creation failed: {str(e)}")
+                
+                # Try with minimal options
+                minimal_options = Options()
+                minimal_options.add_argument('--no-sandbox')
+                minimal_options.add_argument('--disable-dev-shm-usage')
+                if BROWSER_CONFIG['headless']:
+                    minimal_options.add_argument('--headless=new')
+                
+                try:
+                    self.driver = webdriver.Chrome(service=service, options=minimal_options)
+                    self.logger.info("Driver created with minimal options")
+                except Exception as e2:
+                    self.logger.error(f"Driver creation with minimal options also failed: {str(e2)}")
+                    return False
             
             # Set timeouts
             self.driver.set_page_load_timeout(NAVIGATION_CONFIG['page_load_timeout'])
@@ -67,11 +203,43 @@ class BrowserManager:
             # Setup wait object
             self.wait = WebDriverWait(self.driver, NAVIGATION_CONFIG['implicit_wait'])
             
-            self.logger.info(f"Browser driver setup complete for {self.viewport} viewport")
+            # Test the driver with a simple operation
+            try:
+                self.driver.get('data:text/html,<html><body>Test</body></html>')
+                self.logger.info("Driver test successful")
+            except Exception as e:
+                self.logger.error(f"Driver test failed: {str(e)}")
+                return False
+            
+            self.logger.info(f"Browser driver setup complete for {self.viewport} viewport on {self.platform}")
             return True
             
         except Exception as e:
             self.logger.error(f"Failed to setup browser driver: {str(e)}")
+            
+            # Provide helpful error messages for common Windows issues
+            if self.platform == 'windows':
+                if "not a valid Win32 application" in str(e):
+                    self.logger.error("""
+                    Windows compatibility issue detected. This usually means:
+                    1. ChromeDriver architecture mismatch (32-bit vs 64-bit)
+                    2. Corrupted ChromeDriver download
+                    3. Antivirus software blocking the driver
+                    
+                    Solutions:
+                    1. Try running as administrator
+                    2. Temporarily disable antivirus
+                    3. Manually download ChromeDriver from https://chromedriver.chromium.org/
+                    4. Ensure Chrome browser is up to date
+                    """)
+                elif "chromedriver" in str(e).lower():
+                    self.logger.error("""
+                    ChromeDriver issue detected. Try:
+                    1. Updating Chrome browser
+                    2. Clearing WebDriver Manager cache
+                    3. Running: pip install --upgrade webdriver-manager
+                    """)
+            
             return False
     
     def navigate_to_url(self, url):
@@ -334,6 +502,39 @@ class BrowserManager:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit"""
         self.close()
+
+    def get_windows_troubleshooting_info(self):
+        """Get Windows-specific troubleshooting information"""
+        if self.platform != 'windows':
+            return {}
+        
+        info = {
+            'platform': self.platform,
+            'python_version': sys.version,
+            'architecture': platform.architecture(),
+            'chrome_version': self._detect_chrome_version(),
+            'webdriver_manager_cache': os.path.expanduser('~/.wdm'),
+            'temp_dir': os.environ.get('TEMP', ''),
+            'user_profile': os.environ.get('USERPROFILE', ''),
+        }
+        
+        # Check if Chrome is installed
+        chrome_paths = [
+            r'C:\Program Files\Google\Chrome\Application\chrome.exe',
+            r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
+            r'C:\Users\{}\AppData\Local\Google\Chrome\Application\chrome.exe'.format(os.getenv('USERNAME', '')),
+        ]
+        
+        chrome_installed = False
+        for path in chrome_paths:
+            if os.path.exists(path):
+                chrome_installed = True
+                info['chrome_path'] = path
+                break
+        
+        info['chrome_installed'] = chrome_installed
+        
+        return info
 
     def _handle_delayed_css(self):
         """
