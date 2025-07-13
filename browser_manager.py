@@ -55,8 +55,40 @@ class BrowserManager:
                                 version = version_line.split()[-1]
                                 self.logger.info(f"Detected Chrome version: {version}")
                                 return version
+            elif self.platform == 'darwin':  # macOS
+                # Try multiple Chrome paths on macOS
+                chrome_paths = [
+                    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+                    '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+                    '/usr/bin/google-chrome',
+                    '/usr/local/bin/google-chrome'
+                ]
+                
+                for path in chrome_paths:
+                    if os.path.exists(path):
+                        result = subprocess.run([path, '--version'], 
+                                             capture_output=True, text=True, timeout=10)
+                        if result.returncode == 0:
+                            version_line = result.stdout.strip()
+                            if 'Google Chrome' in version_line:
+                                version = version_line.split()[-1]
+                                self.logger.info(f"Detected Chrome version: {version}")
+                                return version
+                
+                # Try using 'open' command to get Chrome version
+                try:
+                    result = subprocess.run(['open', '-a', 'Google Chrome', '--args', '--version'], 
+                                         capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        version_line = result.stdout.strip()
+                        if 'Google Chrome' in version_line:
+                            version = version_line.split()[-1]
+                            self.logger.info(f"Detected Chrome version: {version}")
+                            return version
+                except:
+                    pass
             else:
-                # Unix-like systems
+                # Unix-like systems (Linux)
                 result = subprocess.run(['google-chrome', '--version'], 
                                      capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
@@ -101,10 +133,40 @@ class BrowserManager:
             
         return chrome_options
     
+    def _resolve_chromedriver_path(self, driver_path):
+        import os
+        import stat
+        directory = driver_path if os.path.isdir(driver_path) else os.path.dirname(driver_path)
+        self.logger.info(f"[DEBUG] Listing files in {directory}:")
+        for file in os.listdir(directory):
+            full_path = os.path.join(directory, file)
+            perms = oct(os.stat(full_path).st_mode)[-3:]
+            self.logger.info(f"[DEBUG] {file} - perms: {perms}")
+            if file == 'chromedriver' or file == 'chromedriver.exe':
+                # Forcibly set executable bit
+                try:
+                    os.chmod(full_path, os.stat(full_path).st_mode | stat.S_IEXEC)
+                    self.logger.info(f"[DEBUG] Set executable bit on {full_path}")
+                except Exception as e:
+                    self.logger.warning(f"[DEBUG] Could not set executable bit on {full_path}: {e}")
+                if os.path.exists(full_path) and os.access(full_path, os.X_OK):
+                    return full_path
+        # Fallback: search subdirectories
+        for root, dirs, files in os.walk(directory):
+            for file in files:
+                if file == 'chromedriver' or file == 'chromedriver.exe':
+                    full_path = os.path.join(root, file)
+                    try:
+                        os.chmod(full_path, os.stat(full_path).st_mode | stat.S_IEXEC)
+                        self.logger.info(f"[DEBUG] Set executable bit on {full_path}")
+                    except Exception as e:
+                        self.logger.warning(f"[DEBUG] Could not set executable bit on {full_path}: {e}")
+                    if os.path.exists(full_path) and os.access(full_path, os.X_OK):
+                        return full_path
+        return driver_path  # fallback to original
 
-    
     def setup_driver(self):
-        """Setup Chrome WebDriver with enhanced Windows compatibility"""
+        """Setup Chrome WebDriver with enhanced compatibility"""
         try:
             self.logger.info(f"Setting up browser driver for {self.platform} platform")
             
@@ -135,17 +197,228 @@ class BrowserManager:
             
             # Try multiple strategies to get a working service
             service = None
+            max_retries = 3
+            retry_count = 0
+            
+            while retry_count < max_retries:
+                try:
+                    self.logger.info(f"Attempt {retry_count + 1} to setup driver")
+                    
+                    # Strategy 1: Try WebDriver Manager with version detection
+                    try:
+                        chrome_version = self._detect_chrome_version()
+                        if chrome_version:
+                            self.logger.info(f"Using ChromeDriver for Chrome version: {chrome_version}")
+                            # Note: webdriver-manager 4.0.1 doesn't support version parameter
+                            driver_path = ChromeDriverManager().install()
+                            driver_path = self._resolve_chromedriver_path(driver_path)
+                            self.logger.info(f"[DEBUG] Using ChromeDriver path: {driver_path}")
+                        else:
+                            self.logger.info("Using latest ChromeDriver")
+                            driver_path = ChromeDriverManager().install()
+                            driver_path = self._resolve_chromedriver_path(driver_path)
+                            self.logger.info(f"[DEBUG] Using ChromeDriver path: {driver_path}")
+                        
+                        # Ensure we have the correct ChromeDriver executable path
+                        if os.path.isdir(driver_path):
+                            # If it's a directory, look for the chromedriver executable
+                            possible_paths = [
+                                os.path.join(driver_path, 'chromedriver'),
+                                os.path.join(driver_path, 'chromedriver.exe'),
+                                os.path.join(driver_path, 'chromedriver-mac-x64', 'chromedriver'),
+                                os.path.join(driver_path, 'chromedriver-mac-arm64', 'chromedriver'),
+                                os.path.join(driver_path, 'chromedriver-win64', 'chromedriver.exe'),
+                                os.path.join(driver_path, 'chromedriver-linux64', 'chromedriver')
+                            ]
+                            
+                            for path in possible_paths:
+                                if os.path.exists(path) and os.access(path, os.X_OK):
+                                    driver_path = path
+                                    self.logger.info(f"Found ChromeDriver executable at: {driver_path}")
+                                    break
+                            else:
+                                # If no executable found, try to find it in subdirectories
+                                for root, dirs, files in os.walk(driver_path):
+                                    for file in files:
+                                        if file == 'chromedriver' or file == 'chromedriver.exe':
+                                            full_path = os.path.join(root, file)
+                                            if os.access(full_path, os.X_OK):
+                                                driver_path = full_path
+                                                self.logger.info(f"Found ChromeDriver executable at: {driver_path}")
+                                                break
+                                    if driver_path != ChromeDriverManager().install():
+                                        break
+                        elif driver_path.endswith('.chromedriver'):
+                            # Handle case where WebDriver Manager returns wrong file
+                            # Look for the actual chromedriver executable in the same directory
+                            directory = os.path.dirname(driver_path)
+                            actual_driver_path = os.path.join(directory, 'chromedriver')
+                            if os.path.exists(actual_driver_path) and os.access(actual_driver_path, os.X_OK):
+                                driver_path = actual_driver_path
+                                self.logger.info(f"Corrected ChromeDriver path to: {driver_path}")
+                            else:
+                                # Try to find chromedriver in subdirectories
+                                for root, dirs, files in os.walk(directory):
+                                    for file in files:
+                                        if file == 'chromedriver' or file == 'chromedriver.exe':
+                                            full_path = os.path.join(root, file)
+                                            if os.access(full_path, os.X_OK):
+                                                driver_path = full_path
+                                                self.logger.info(f"Found ChromeDriver executable at: {driver_path}")
+                                                break
+                                    if driver_path != ChromeDriverManager().install():
+                                        break
+                        
+                        driver_path = self._resolve_chromedriver_path(driver_path)
+                        self.logger.info(f"[DEBUG] Using ChromeDriver path: {driver_path}")
+                        service = Service(driver_path)
+                        self.logger.info("WebDriver Manager strategy successful")
+                        break
+                        
+                    except Exception as e:
+                        self.logger.warning(f"WebDriver Manager strategy failed: {str(e)}")
+                        
+                        # Strategy 2: Try system ChromeDriver
+                        try:
+                            result = subprocess.run(['chromedriver', '--version'], 
+                                                 capture_output=True, text=True, timeout=10)
+                            if result.returncode == 0:
+                                self.logger.info("Using system ChromeDriver")
+                                service = Service('chromedriver')
+                                break
+                            else:
+                                raise Exception("System ChromeDriver not available")
+                        except Exception as e2:
+                            self.logger.warning(f"System ChromeDriver strategy failed: {str(e2)}")
+                            
+                            # Strategy 3: Try WebDriver Manager without version detection
+                            try:
+                                self.logger.info("Trying WebDriver Manager without version detection")
+                                driver_path = ChromeDriverManager().install()
+                                driver_path = self._resolve_chromedriver_path(driver_path)
+                                self.logger.info(f"[DEBUG] Using ChromeDriver path: {driver_path}")
+                                
+                                # Apply the same path correction logic
+                                if os.path.isdir(driver_path):
+                                    possible_paths = [
+                                        os.path.join(driver_path, 'chromedriver'),
+                                        os.path.join(driver_path, 'chromedriver.exe'),
+                                        os.path.join(driver_path, 'chromedriver-mac-x64', 'chromedriver'),
+                                        os.path.join(driver_path, 'chromedriver-mac-arm64', 'chromedriver'),
+                                        os.path.join(driver_path, 'chromedriver-win64', 'chromedriver.exe'),
+                                        os.path.join(driver_path, 'chromedriver-linux64', 'chromedriver')
+                                    ]
+                                    
+                                    for path in possible_paths:
+                                        if os.path.exists(path) and os.access(path, os.X_OK):
+                                            driver_path = path
+                                            self.logger.info(f"Found ChromeDriver executable at: {driver_path}")
+                                            break
+                                    else:
+                                        # If no executable found, try to find it in subdirectories
+                                        for root, dirs, files in os.walk(driver_path):
+                                            for file in files:
+                                                if file == 'chromedriver' or file == 'chromedriver.exe':
+                                                    full_path = os.path.join(root, file)
+                                                    if os.access(full_path, os.X_OK):
+                                                        driver_path = full_path
+                                                        self.logger.info(f"Found ChromeDriver executable at: {driver_path}")
+                                                        break
+                                            if driver_path != ChromeDriverManager().install():
+                                                break
+                                
+                                driver_path = self._resolve_chromedriver_path(driver_path)
+                                self.logger.info(f"[DEBUG] Using ChromeDriver path: {driver_path}")
+                                service = Service(driver_path)
+                                self.logger.info("Fallback WebDriver Manager strategy successful")
+                                break
+                            except Exception as e3:
+                                self.logger.error(f"All driver strategies failed: {str(e3)}")
+                                retry_count += 1
+                                if retry_count < max_retries:
+                                    self.logger.info("Clearing WebDriver cache and retrying...")
+                                    self.clear_webdriver_cache()
+                                    continue
+                                else:
+                                    return False
+                
+                except Exception as e:
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        self.logger.info(f"Driver setup failed, retrying... (attempt {retry_count + 1})")
+                        self.clear_webdriver_cache()
+                        continue
+                    else:
+                        self.logger.error(f"All driver setup attempts failed")
+                        return False
             
             # Strategy 1: Try WebDriver Manager with version detection
             try:
                 chrome_version = self._detect_chrome_version()
                 if chrome_version:
                     self.logger.info(f"Using ChromeDriver for Chrome version: {chrome_version}")
-                    driver_path = ChromeDriverManager(version=chrome_version).install()
+                    # Note: webdriver-manager 4.0.1 doesn't support version parameter
+                    driver_path = ChromeDriverManager().install()
+                    driver_path = self._resolve_chromedriver_path(driver_path)
+                    self.logger.info(f"[DEBUG] Using ChromeDriver path: {driver_path}")
                 else:
                     self.logger.info("Using latest ChromeDriver")
                     driver_path = ChromeDriverManager().install()
+                    driver_path = self._resolve_chromedriver_path(driver_path)
+                    self.logger.info(f"[DEBUG] Using ChromeDriver path: {driver_path}")
                 
+                # Ensure we have the correct ChromeDriver executable path
+                if os.path.isdir(driver_path):
+                    # If it's a directory, look for the chromedriver executable
+                    possible_paths = [
+                        os.path.join(driver_path, 'chromedriver'),
+                        os.path.join(driver_path, 'chromedriver.exe'),
+                        os.path.join(driver_path, 'chromedriver-mac-x64', 'chromedriver'),
+                        os.path.join(driver_path, 'chromedriver-mac-arm64', 'chromedriver'),
+                        os.path.join(driver_path, 'chromedriver-win64', 'chromedriver.exe'),
+                        os.path.join(driver_path, 'chromedriver-linux64', 'chromedriver')
+                    ]
+                    
+                    for path in possible_paths:
+                        if os.path.exists(path) and os.access(path, os.X_OK):
+                            driver_path = path
+                            self.logger.info(f"Found ChromeDriver executable at: {driver_path}")
+                            break
+                    else:
+                        # If no executable found, try to find it in subdirectories
+                        for root, dirs, files in os.walk(driver_path):
+                            for file in files:
+                                if file == 'chromedriver' or file == 'chromedriver.exe':
+                                    full_path = os.path.join(root, file)
+                                    if os.access(full_path, os.X_OK):
+                                        driver_path = full_path
+                                        self.logger.info(f"Found ChromeDriver executable at: {driver_path}")
+                                        break
+                            if driver_path != ChromeDriverManager().install():
+                                break
+                elif driver_path.endswith('.chromedriver'):
+                    # Handle case where WebDriver Manager returns wrong file
+                    # Look for the actual chromedriver executable in the same directory
+                    directory = os.path.dirname(driver_path)
+                    actual_driver_path = os.path.join(directory, 'chromedriver')
+                    if os.path.exists(actual_driver_path) and os.access(actual_driver_path, os.X_OK):
+                        driver_path = actual_driver_path
+                        self.logger.info(f"Corrected ChromeDriver path to: {driver_path}")
+                    else:
+                        # Try to find chromedriver in subdirectories
+                        for root, dirs, files in os.walk(directory):
+                            for file in files:
+                                if file == 'chromedriver' or file == 'chromedriver.exe':
+                                    full_path = os.path.join(root, file)
+                                    if os.access(full_path, os.X_OK):
+                                        driver_path = full_path
+                                        self.logger.info(f"Found ChromeDriver executable at: {driver_path}")
+                                        break
+                            if driver_path != ChromeDriverManager().install():
+                                break
+                
+                driver_path = self._resolve_chromedriver_path(driver_path)
+                self.logger.info(f"[DEBUG] Using ChromeDriver path: {driver_path}")
                 service = Service(driver_path)
                 self.logger.info("WebDriver Manager strategy successful")
                 
@@ -168,6 +441,60 @@ class BrowserManager:
                     try:
                         self.logger.info("Trying WebDriver Manager without version detection")
                         driver_path = ChromeDriverManager().install()
+                        driver_path = self._resolve_chromedriver_path(driver_path)
+                        self.logger.info(f"[DEBUG] Using ChromeDriver path: {driver_path}")
+                        
+                        # Apply the same path correction logic
+                        if os.path.isdir(driver_path):
+                            possible_paths = [
+                                os.path.join(driver_path, 'chromedriver'),
+                                os.path.join(driver_path, 'chromedriver.exe'),
+                                os.path.join(driver_path, 'chromedriver-mac-x64', 'chromedriver'),
+                                os.path.join(driver_path, 'chromedriver-mac-arm64', 'chromedriver'),
+                                os.path.join(driver_path, 'chromedriver-win64', 'chromedriver.exe'),
+                                os.path.join(driver_path, 'chromedriver-linux64', 'chromedriver')
+                            ]
+                            
+                            for path in possible_paths:
+                                if os.path.exists(path) and os.access(path, os.X_OK):
+                                    driver_path = path
+                                    self.logger.info(f"Found ChromeDriver executable at: {driver_path}")
+                                    break
+                            else:
+                                # If no executable found, try to find it in subdirectories
+                                for root, dirs, files in os.walk(driver_path):
+                                    for file in files:
+                                        if file == 'chromedriver' or file == 'chromedriver.exe':
+                                            full_path = os.path.join(root, file)
+                                            if os.access(full_path, os.X_OK):
+                                                driver_path = full_path
+                                                self.logger.info(f"Found ChromeDriver executable at: {driver_path}")
+                                                break
+                                    if driver_path != ChromeDriverManager().install():
+                                        break
+                        elif driver_path.endswith('.chromedriver'):
+                            # Handle case where WebDriver Manager returns wrong file
+                            # Look for the actual chromedriver executable in the same directory
+                            directory = os.path.dirname(driver_path)
+                            actual_driver_path = os.path.join(directory, 'chromedriver')
+                            if os.path.exists(actual_driver_path) and os.access(actual_driver_path, os.X_OK):
+                                driver_path = actual_driver_path
+                                self.logger.info(f"Corrected ChromeDriver path to: {driver_path}")
+                            else:
+                                # Try to find chromedriver in subdirectories
+                                for root, dirs, files in os.walk(directory):
+                                    for file in files:
+                                        if file == 'chromedriver' or file == 'chromedriver.exe':
+                                            full_path = os.path.join(root, file)
+                                            if os.access(full_path, os.X_OK):
+                                                driver_path = full_path
+                                                self.logger.info(f"Found ChromeDriver executable at: {driver_path}")
+                                                break
+                                    if driver_path != ChromeDriverManager().install():
+                                        break
+                        
+                        driver_path = self._resolve_chromedriver_path(driver_path)
+                        self.logger.info(f"[DEBUG] Using ChromeDriver path: {driver_path}")
                         service = Service(driver_path)
                         self.logger.info("Fallback WebDriver Manager strategy successful")
                     except Exception as e3:
@@ -503,6 +830,77 @@ class BrowserManager:
         """Context manager exit"""
         self.close()
 
+    def clear_webdriver_cache(self):
+        """Clear WebDriver Manager cache to resolve driver issues"""
+        try:
+            cache_dir = os.path.expanduser('~/.wdm')
+            if os.path.exists(cache_dir):
+                import shutil
+                shutil.rmtree(cache_dir)
+                self.logger.info("WebDriver Manager cache cleared successfully")
+                return True
+            else:
+                self.logger.info("No WebDriver Manager cache found to clear")
+                return True
+        except Exception as e:
+            self.logger.error(f"Error clearing WebDriver Manager cache: {str(e)}")
+            return False
+
+    def get_troubleshooting_info(self):
+        """Get troubleshooting information for the current platform"""
+        info = {
+            'platform': self.platform,
+            'python_version': sys.version,
+            'architecture': platform.architecture(),
+            'chrome_version': self._detect_chrome_version(),
+            'webdriver_manager_cache': os.path.expanduser('~/.wdm'),
+        }
+        
+        if self.platform == 'windows':
+            info.update({
+                'temp_dir': os.environ.get('TEMP', ''),
+                'user_profile': os.environ.get('USERPROFILE', ''),
+            })
+            
+            # Check if Chrome is installed
+            chrome_paths = [
+                r'C:\Program Files\Google\Chrome\Application\chrome.exe',
+                r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
+                r'C:\Users\{}\AppData\Local\Google\Chrome\Application\chrome.exe'.format(os.getenv('USERNAME', '')),
+            ]
+            
+            chrome_installed = False
+            for path in chrome_paths:
+                if os.path.exists(path):
+                    chrome_installed = True
+                    info['chrome_path'] = path
+                    break
+            
+            info['chrome_installed'] = chrome_installed
+        elif self.platform == 'darwin':  # macOS
+            info.update({
+                'home_dir': os.environ.get('HOME', ''),
+            })
+            
+            # Check if Chrome is installed on macOS
+            chrome_paths = [
+                '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+                '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+                '/usr/bin/google-chrome',
+                '/usr/local/bin/google-chrome'
+            ]
+            
+            chrome_installed = False
+            for path in chrome_paths:
+                if os.path.exists(path):
+                    chrome_installed = True
+                    info['chrome_path'] = path
+                    break
+            
+            info['chrome_installed'] = chrome_installed
+        
+        return info
+
     def get_windows_troubleshooting_info(self):
         """Get Windows-specific troubleshooting information"""
         if self.platform != 'windows':
@@ -535,6 +933,31 @@ class BrowserManager:
         info['chrome_installed'] = chrome_installed
         
         return info
+
+    def _clear_webdriver_cache(self):
+        """Clear WebDriver Manager cache to resolve driver issues"""
+        try:
+            cache_dir = os.path.expanduser('~/.wdm')
+            if os.path.exists(cache_dir):
+                import shutil
+                shutil.rmtree(cache_dir)
+                self.logger.info("Cleared WebDriver Manager cache")
+                return True
+        except Exception as e:
+            self.logger.warning(f"Could not clear WebDriver cache: {str(e)}")
+        return False
+
+    def _fix_chromedriver_permissions(self, driver_path):
+        """Fix ChromeDriver executable permissions"""
+        try:
+            if os.path.exists(driver_path):
+                # Make executable
+                os.chmod(driver_path, 0o755)
+                self.logger.info(f"Fixed permissions for: {driver_path}")
+                return True
+        except Exception as e:
+            self.logger.warning(f"Could not fix ChromeDriver permissions: {str(e)}")
+        return False
 
     def _handle_delayed_css(self):
         """
